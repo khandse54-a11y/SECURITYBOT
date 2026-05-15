@@ -5,8 +5,10 @@ const {
   AudioPlayerStatus,
   VoiceConnectionStatus,
   entersState,
+  StreamType,
 } = require('@discordjs/voice');
-const playdl = require('play-dl');
+const ytdl = require('@distube/ytdl-core');
+const yts  = require('yt-search');
 
 const playNext = async (guildId, client, textChannel) => {
   const sq = client.musicQueues.get(guildId);
@@ -25,9 +27,20 @@ const playNext = async (guildId, client, textChannel) => {
   }
 
   try {
-    const source = await playdl.stream(song.url, { quality: 2 });
-    const resource = createAudioResource(source.stream, { inputType: source.type, inlineVolume: false });
+    const stream = ytdl(song.url, {
+      filter: 'audioonly',
+      quality: 'lowestaudio',
+      highWaterMark: 1 << 25,
+      dlChunkSize: 0,
+    });
 
+    stream.on('error', err => {
+      console.error('[STREAM ERROR]', err.message);
+      sq.queue.shift();
+      playNext(guildId, client, textChannel);
+    });
+
+    const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary, inlineVolume: false });
     const player = createAudioPlayer();
     sq.player = player;
     sq.connection.subscribe(player);
@@ -38,7 +51,11 @@ const playNext = async (guildId, client, textChannel) => {
     }
 
     player.once(AudioPlayerStatus.Idle, () => { sq.queue.shift(); playNext(guildId, client, textChannel); });
-    player.once('error', err => { console.error('[PLAYER ERROR]', err.message); sq.queue.shift(); playNext(guildId, client, textChannel); });
+    player.once('error', err => {
+      console.error('[PLAYER ERROR]', err.message);
+      sq.queue.shift();
+      playNext(guildId, client, textChannel);
+    });
 
   } catch (err) {
     console.error('[PLAY ERROR]', err.message);
@@ -65,15 +82,15 @@ module.exports = {
     let songUrl, songTitle;
 
     try {
-      if (playdl.yt_validate(query) === 'video') {
-        const info = await playdl.video_info(query);
+      if (ytdl.validateURL(query)) {
+        const info = await ytdl.getBasicInfo(query);
         songUrl   = query;
-        songTitle = info.video_details.title;
+        songTitle = info.videoDetails.title;
       } else {
-        const results = await playdl.search(query, { source: { youtube: 'video' }, limit: 1 });
-        if (!results.length) return searching.edit('❌ No results found.');
-        songUrl   = results[0].url;
-        songTitle = results[0].title;
+        const results = await yts(query);
+        if (!results.videos.length) return searching.edit('❌ No results found.');
+        songUrl   = results.videos[0].url;
+        songTitle = results.videos[0].title;
       }
     } catch (err) {
       console.error('[SEARCH ERROR]', err.message);
