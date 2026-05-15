@@ -19,6 +19,9 @@ const playNext = async (guildId, client, textChannel) => {
     return;
   }
 
+  if (sq.playing) return;
+  sq.playing = true;
+
   const song = sq.queue[0];
 
   if (sq.player) {
@@ -34,12 +37,6 @@ const playNext = async (guildId, client, textChannel) => {
       dlChunkSize: 0,
     });
 
-    stream.on('error', err => {
-      console.error('[STREAM ERROR]', err.message);
-      sq.queue.shift();
-      playNext(guildId, client, textChannel);
-    });
-
     const resource = createAudioResource(stream, { inputType: StreamType.Arbitrary, inlineVolume: false });
     const player = createAudioPlayer();
     sq.player = player;
@@ -50,15 +47,22 @@ const playNext = async (guildId, client, textChannel) => {
       textChannel.send(`🎵 **Now playing:** ${song.title}\n👤 Requested by: ${song.requestedBy}`).catch(() => {});
     }
 
-    player.once(AudioPlayerStatus.Idle, () => { sq.queue.shift(); playNext(guildId, client, textChannel); });
+    player.once(AudioPlayerStatus.Idle, () => {
+      sq.playing = false;
+      sq.queue.shift();
+      playNext(guildId, client, textChannel);
+    });
+
     player.once('error', err => {
       console.error('[PLAYER ERROR]', err.message);
+      sq.playing = false;
       sq.queue.shift();
       playNext(guildId, client, textChannel);
     });
 
   } catch (err) {
     console.error('[PLAY ERROR]', err.message);
+    sq.playing = false;
     sq.queue.shift();
     playNext(guildId, client, textChannel);
   }
@@ -106,7 +110,7 @@ module.exports = {
       return searching.edit(`✅ **Added to queue:** ${song.title} — Position #${sq.queue.length}`);
     }
 
-    client.musicQueues.set(guildId, { queue: [song], player: null, connection: null });
+    client.musicQueues.set(guildId, { queue: [song], player: null, connection: null, playing: false });
     const sq = client.musicQueues.get(guildId);
 
     try {
