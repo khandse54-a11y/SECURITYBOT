@@ -1,0 +1,16 @@
+{
+  "name": "discord-security-bot",
+  "version": "3.0.0",
+  "description": "High Security Discord Bot with Anti-Nuke",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@discordjs/voice": "^0.17.0",
+    "@discordjs/opus": "^0.9.0",
+    "dotenv": "^16.3.1",
+    "libsodium-wrappers": "^0.7.13"
+  }
+}
