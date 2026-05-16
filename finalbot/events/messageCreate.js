@@ -1,15 +1,20 @@
-// events/messageCreate.js
 const { isWhitelisted } = require('../utils/whitelist');
 
 const spamMap = new Map();
 const SPAM_LIMIT       = 5;
 const SPAM_WINDOW_MS   = 5000;
-const SPAM_TIMEOUT_MS  = 10 * 60 * 1000;  // 10 minutes
-const ABUSE_TIMEOUT_MS = 60 * 60 * 1000;  // 60 minutes
+const SPAM_TIMEOUT_MS  = 10 * 60 * 1000;
+const ABUSE_TIMEOUT_MS = 60 * 60 * 1000;
 
 const ABUSIVE_WORDS = [
+  // English
   'fuck','shit','bitch','bastard','dick','cunt','nigger',
-  'faggot','retard','whore','slut','asshole','motherfucker','fucker'
+  'faggot','retard','whore','slut','asshole','motherfucker','fucker',
+  // Hindi/Urdu
+  'harami','kamina','chutiya','bhosdike','madarchod','laude','randi','mkc',
+  'bhosdi','maderchod','bsdk','mc','bc','behenchod','gaandu','gandu',
+  'lodu','lawde','choot','bhenchod','saala','kutte','haramzada',
+  'ullu','bakwaas','gandii','lund','chakka','hijra','chodi','chodd',
 ];
 
 module.exports = {
@@ -36,24 +41,26 @@ module.exports = {
       return;
     }
 
-    // ── 1. @EVERYONE / @HERE → BAN ───────────────────────────────────────
-    // Check BEFORE whitelist so we log it, but skip action if whitelisted
+    // ── 1. @EVERYONE / @HERE → IMMEDIATE DELETE + BAN ────────────────────
     if (message.mentions.everyone) {
-      if (isWhitelisted(userId)) return; // whitelisted — allow
-      try {
-        await message.delete().catch(() => {});
-        await member.ban({ reason: '🔒 Anti-Nuke: Unauthorized @everyone/@here ping' });
-        await logAction(message.guild,
-          `🚫 **BANNED** <@${userId}> (\`${message.author.tag}\`) — pinged @everyone/@here in <#${message.channel.id}>`
-        );
-      } catch (err) { console.error('[EVERYONE BAN ERROR]', err.message); }
+      if (isWhitelisted(userId)) return;
+
+      await Promise.all([
+        message.delete().catch(() => {}),
+        member.ban({ deleteMessageSeconds: 0, reason: '🔒 Anti-Nuke: Unauthorized @everyone/@here ping' })
+          .catch(err => console.error('[EVERYONE BAN ERROR]', err.message)),
+      ]);
+
+      await logAction(message.guild,
+        `🚫 **BANNED** <@${userId}> (\`${message.author.tag}\`) — pinged @everyone/@here in <#${message.channel.id}>`
+      );
       return;
     }
 
-    // Whitelisted users bypass spam & abuse checks below
+    // Whitelisted users bypass spam & abuse checks
     if (isWhitelisted(userId)) return;
 
-    // ── 2. SPAM → 10 MIN TIMEOUT ─────────────────────────────────────────
+    // ── 2. SPAM → 10 MIN TIMEOUT + DELETE ────────────────────────────────
     const now  = Date.now();
     const data = spamMap.get(userId) || { count: 0, first: now };
 
@@ -66,7 +73,10 @@ module.exports = {
       if (data.count >= SPAM_LIMIT) {
         spamMap.delete(userId);
         try {
-          await member.timeout(SPAM_TIMEOUT_MS, '🔒 Anti-Spam: Too many messages');
+          await Promise.all([
+            message.delete().catch(() => {}),
+            member.timeout(SPAM_TIMEOUT_MS, '🔒 Anti-Spam: Too many messages'),
+          ]);
           await message.channel.send(
             `⏱️ <@${userId}> has been **timed out for 10 minutes** for spamming.`
           ).catch(() => {});
@@ -78,12 +88,14 @@ module.exports = {
       }
     }
 
-    // ── 3. ABUSIVE LANGUAGE → 60 MIN TIMEOUT ─────────────────────────────
+    // ── 3. ABUSIVE LANGUAGE → 60 MIN TIMEOUT + DELETE ────────────────────
     const hasAbuse = ABUSIVE_WORDS.some(w => content.includes(w));
     if (hasAbuse) {
       try {
-        await message.delete().catch(() => {});
-        await member.timeout(ABUSE_TIMEOUT_MS, '🔒 Language filter: Abusive language');
+        await Promise.all([
+          message.delete().catch(() => {}),
+          member.timeout(ABUSE_TIMEOUT_MS, '🔒 Language filter: Abusive language'),
+        ]);
         await message.channel.send(
           `🤐 <@${userId}> has been **timed out for 60 minutes** for using abusive language.`
         ).catch(() => {});
