@@ -15,6 +15,7 @@ module.exports = {
             '`!timeout @user [minutes] [reason]` — Timeout a member',
             '`!untimeout @user` — Remove timeout from a member',
             '`!unban <userID>` — Unban by ID',
+            '`!warn @user [reason]` — Warn a member via DM',
           ].join('\n'),
         },
         {
