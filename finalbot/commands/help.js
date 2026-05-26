@@ -1,21 +1,19 @@
-const { EmbedBuilder } = require('discord.js');
-
 module.exports = {
   name: 'help',
   async execute(message, args, client) {
-    const embed = new EmbedBuilder()
-      .setTitle('🛡️ SECURITY BOT — ALL COMMANDS')
-      .setColor(0x7289DA)
-      .addFields(
+    const embed = {
+      color: 0x7289DA,
+      title: '🛡️ SECURITY BOT — ALL COMMANDS',
+      fields: [
         {
           name: '🔒 Moderation (Whitelist Only)',
           value: [
             '`!ban @user [reason]` — Ban a member',
             '`!kick @user [reason]` — Kick a member',
             '`!timeout @user [minutes] [reason]` — Timeout a member',
-            '`!untimeout @user` — Remove timeout from a member',
+            '`!untimeout @user` — Remove timeout',
             '`!unban <userID>` — Unban by ID',
-            '`!warn @user [reason]` — Warn a member via DM',
+            '`!warn @user [reason]` — Warn via DM',
           ].join('\n'),
         },
         {
@@ -29,24 +27,26 @@ module.exports = {
         {
           name: '🚨 Auto-Security (Always ON)',
           value: [
-            '• @everyone/@here ping → **INSTANT BAN**',
-            '• Links → **30 min timeout + msg deleted**',
-            '• Spam (5 msgs/5sec) → **10 min timeout**',
+            '• @everyone/@here → **INSTANT BAN**',
+            '• Links → **30 min timeout**',
+            '• Spam → **10 min timeout**',
             '• Abusive language → **60 min timeout**',
-            '• Mass ban/kick/channel/role delete → **INSTANT BAN**',
+            '• Mass nuke attempt → **INSTANT BAN**',
           ].join('\n'),
         },
         {
           name: '🔊 Voice',
-          value: '`!join` — Join voice channel (deafened & muted)',
+          value: '`!join` — Join VC (deafened & muted)',
         },
         {
           name: 'ℹ️ Info',
-          value: [
-            '`!ping` — Check bot latency',
-            '`!help` — Show this message',
-          ].join('\n'),
-        }
-      )
-      .setFooter({ text: 'Security Bot — Protecting your server 24/7' })
-      .s
+          value: '`!ping` — Latency | `!help` — This menu',
+        },
+      ],
+      footer: { text: 'Security Bot — Protecting your server 24/7' },
+      timestamp: new Date().toISOString(),
+    };
+
+    message.reply({ embeds: [embed] });
+  }
+};
