@@ -32,14 +32,14 @@ function normalizeText(text) {
 const BAD_WORD_ROOTS = [
   // English
   'fuck','fck','fuk','fvck','phuck','frick',
-  'shit','sht','shyt','sh1t',
-  'bitch','btch','b1tch','biatch',
+  'shit','sht','shyt',
+  'bitch','btch','biatch',
   'cunt','cnt','cvnt',
   'nigger','nigga','nigg','niga',
   'faggot','fag','fgt',
   'asshole','ashole','azhole',
   'bastard','basterd',
-  'motherfucker','mofo','mf',
+  'motherfucker','mofo',
   'whore','whor','hoe',
   'slut','slt',
   'dick','dck','dik',
@@ -52,7 +52,7 @@ const BAD_WORD_ROOTS = [
   'douchebag','douche',
   'dipshit','jackass','shithead',
   // Hindi/Urdu
-  'chutiya','chutia','chut','choot','terimkc','mgh','laudi'
+  'chutiya','chutia','chut','choot','terimkc','mgh','laudi',
   'madarchod','madarjat','maderchod',
   'behenchod','bhenchod',
   'bhosdike','bhosdi',
@@ -67,7 +67,7 @@ const BAD_WORD_ROOTS = [
   'jhatu','bhadwa','dalal',
   'tatti','ullu','hijra','chakka',
   // Odia
-  'pela','maabahana','machikani','chhinali','maghia','bedhachua','boka','bokachoda','choda','bia'
+  'pela','maabahana','machikani','chhinali','maghia','bedhachua','bokachoda','choda','bia',
   // Spanish
   'puta','puto','mierda','cabron','cono',
   'joder','pendejo','chingada','verga',
@@ -107,49 +107,6 @@ function containsAbuse(text) {
   return BAD_WORD_ROOTS.some(word => normalized.includes(normalizeText(word)));
 }
 
-const nukeTracker = {
-  channelDelete : new Map(),
-  roleDelete    : new Map(),
-  ban           : new Map(),
-  kick          : new Map(),
-  webhookCreate : new Map(),
-  roleCreate    : new Map(),
-  channelCreate : new Map(),
-};
-
-const NUKE_LIMITS = {
-  channelDelete : { count: 2, window: 8000 },
-  roleDelete    : { count: 2, window: 8000 },
-  ban           : { count: 2, window: 8000 },
-  kick          : { count: 2, window: 8000 },
-  webhookCreate : { count: 2, window: 8000 },
-  roleCreate    : { count: 3, window: 8000 },
-  channelCreate : { count: 3, window: 8000 },
-};
-
-function trackNukeAction(type, userId) {
-  const map  = nukeTracker[type];
-  const now  = Date.now();
-  const data = map.get(userId) || { count: 0, first: now };
-  if (now - data.first > NUKE_LIMITS[type].window) {
-    map.set(userId, { count: 1, first: now });
-    return false;
-  }
-  data.count++;
-  map.set(userId, data);
-  return data.count >= NUKE_LIMITS[type].count;
-}
-
-async function nukeban(guild, executorId, reason, client) {
-  try {
-    await guild.members.ban(executorId, { reason: `🔒 ANTI-NUKE: ${reason}` });
-    const ch = guild.channels.cache.find(
-      c => c.isTextBased() && ['mod-log','security-log','bot-log','logs','general'].includes(c.name)
-    );
-    if (ch) ch.send(`🚨 **ANTI-NUKE!** <@${executorId}> **INSTANTLY BANNED** — ${reason}`).catch(() => {});
-  } catch (err) { console.error('[NUKE BAN ERROR]', err.message); }
-}
-
 async function dmUser(user, reason, duration) {
   try {
     await user.send(
@@ -168,7 +125,6 @@ async function logAction(guild, msg) {
   if (ch) ch.send(`[🛡️ Security] ${msg}`).catch(() => {});
 }
 
-// Auto-delete notification messages after 5 seconds
 async function sendAndDelete(channel, msg) {
   const sent = await channel.send(msg).catch(() => null);
   if (sent) setTimeout(() => sent.delete().catch(() => {}), 5000);
@@ -176,8 +132,6 @@ async function sendAndDelete(channel, msg) {
 
 module.exports = {
   name: 'messageCreate',
-  trackNukeAction,
-  nukeban,
   async execute(message, client) {
     if (!message.guild || message.author.bot) return;
     const member = message.member;
