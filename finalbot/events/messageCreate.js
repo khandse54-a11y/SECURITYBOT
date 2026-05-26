@@ -7,20 +7,16 @@ const SPAM_TIMEOUT_MS  = 10 * 60 * 1000;
 const ABUSE_TIMEOUT_MS = 60 * 60 * 1000;
 const LINK_TIMEOUT_MS  = 30 * 60 * 1000;
 
-// ── LINK DETECTION ────────────────────────────────────────────────────────────
 const LINK_REGEX = /https?:\/\/[^\s]+|discord\.gg\/[^\s]+|www\.[^\s]+\.[a-z]{2,}/gi;
 
-// ── ADVANCED ABUSE DETECTION ──────────────────────────────────────────────────
-// Normalize text: remove spaces, leet speak, unicode tricks, zalgo, repeated chars
 function normalizeText(text) {
   return text
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')   // remove accents
-    .replace(/[^a-z0-9\s]/g, '')       // remove special chars
-    .replace(/(.)\1{2,}/g, '$1')       // remove repeated chars (fuuuck → fuk)
-    .replace(/\s+/g, '')               // remove spaces
-    // leet speak replacements
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/(.)\1{2,}/g, '$1')
+    .replace(/\s+/g, '')
     .replace(/0/g, 'o')
     .replace(/1/g, 'i')
     .replace(/3/g, 'e')
@@ -33,9 +29,8 @@ function normalizeText(text) {
     .replace(/\+/g, 't');
 }
 
-// Core bad word roots — normalized forms (no need to list every variation)
 const BAD_WORD_ROOTS = [
-  // ── English ──
+  // English
   'fuck','fck','fuk','fvck','phuck','frick',
   'shit','sht','shyt','sh1t',
   'bitch','btch','b1tch','biatch',
@@ -49,172 +44,69 @@ const BAD_WORD_ROOTS = [
   'slut','slt',
   'dick','dck','dik',
   'cock','cok',
-  'pussy','pussy','pussi',
+  'pussy','pussi',
   'retard','rtard',
   'wanker','wank',
   'twat','twt',
   'prick','prik',
   'douchebag','douche',
-  'dipshit','dips',
-  'jackass','jckass',
-  'shithead','shthead',
-
-  // ── Hindi / Urdu ──
-  'chutiya','chutia','chut','choot',
-  'madarchod','madarjat','maderchod','maarachod',
-  'behenchod','bhenchod','bhnchd',
-  'bhosdike','bhosdi','bhosd',
-  'harami','hrami',
-  'kamina','kameena',
+  'dipshit','jackass','shithead',
+  // Hindi/Urdu
+  'chutiya','chutia','chut','choot','terimkc','mgh','laudi'
+  'madarchod','madarjat','maderchod',
+  'behenchod','bhenchod',
+  'bhosdike','bhosdi',
+  'harami','kamina','kameena',
   'laude','lawde','lodu','lund','lavde',
   'randi','raand',
   'gaandu','gandu','gaand','gand',
-  'mkc','mkg','bsdk','mc','bc',
+  'mkc','bsdk','mc','bc',
   'haramzada','haramkhor',
   'kutte','kutta','kutti',
   'saala','sala','saali',
-  'jhatu','jhaatu',
-  'bhadwa','dalal',
-  'tatti','tattu',
-  'ullu','bakwaas',
-  'hijra','chakka',
-
-  // ── Odia ──
-  'pela','peluchi','peliba',
-  'maabahana','bahana',
-  'machikani','machike',
-  'chhinali',
-  'bhau','thulimaa',
-  'kukura','gadha',
-
-  // ── Spanish ──
-  'puta','puto',
-  'mierda',
-  'cabron','cabrona',
-  'cono','coño',
-  'joder',
-  'pendejo','pendeja',
-  'chingada','chinga','chingo',
-  'verga',
-  'culero','culona',
-  'maricon','marica',
-  'pinche',
-  'putamadre',
-  'hijodeputa','hdp',
-  'gilipollas',
-  'imbecil',
-  'carajo',
-  'mamada',
-  'culiao',
-
-  // ── Arabic ──
-  'kuss','kos','kus',
-  'sharmouta','sharmuta',
-  'khara','khare',
-  'kalb','kelb',
-  'hmar','himar',
-  'zebi','zbi',
-  'ayre','aire',
-  'khawal',
-  'manyak',
-  'qahba','kahba',
-
-  // ── French ──
-  'merde',
-  'putain',
-  'connard','connasse',
-  'salope',
-  'encule','enculé',
-  'batard','bâtard',
-  'fdp','ntm','tg',
-  'bordel',
-  'couille',
-  'nique','niquer',
-
-  // ── German ──
-  'scheiße','scheisse','scheiss',
-  'fick','ficken',
-  'hurensohn','hure',
-  'wichser','wichse',
-  'arschloch','arsch',
-  'schlampe',
-  'blödmann','bloedmann',
-  'vollidiot',
-  'mistkerl',
-
-  // ── Portuguese ──
-  'porra',
-  'caralho',
-  'merda',
-  'foder','fodase',
-  'cuzao','cuzão',
-  'viado',
-  'buceta',
-  'fdp','fdputa',
-  'arrombado',
-  'babaca',
-
-  // ── Russian (romanized) ──
-  'blyad','blyat',
-  'suka','suka',
-  'pizda','pizde',
-  'khuy','huy',
-  'ebat','ebal','ebu',
-  'mudak',
-  'pidor','pidor',
-  'zalupa',
-  'cyka',
-  'nahuy','nahui',
-  'pizdec',
-  'gandon',
-  'shlyukha',
-
-  // ── Turkish ──
-  'sik','sikerim',
-  'orospu','orospucocugu',
-  'got','götü',
-  'amk','amina',
-  'bok',
-  'pic','piç',
-  'ibne',
-  'yarrak',
-  'kahpe',
-
-  // ── Bengali ──
-  'magi','maagi',
-  'choda','chode',
-  'bokachoda','boka',
-  'khanki',
-  'banchod','baanchod',
-  'shuorer',
-
-  // ── Italian ──
-  'cazzo','cazz',
-  'vaffanculo','vaffan',
-  'minchia',
-  'stronzo','stronza',
-  'puttana',
-  'figliodiputtana',
-  'coglione',
-  'fanculo',
-
-  // ── Japanese (romaji) ──
-  'kichiku','kisama','temee','kuso','yarō','manuke',
-
-  // ── Korean (romaji) ──
-  'sibal','ssibal','gaesekki','byeonshin','jiral','jotat','ssangnyom',
+  'jhatu','bhadwa','dalal',
+  'tatti','ullu','hijra','chakka',
+  // Odia
+  'pela','maabahana','machikani','chhinali','maghia','bedhachua','boka','bokachoda','choda','bia'
+  // Spanish
+  'puta','puto','mierda','cabron','cono',
+  'joder','pendejo','chingada','verga',
+  'culero','maricon','pinche','gilipollas',
+  // Arabic
+  'kuss','kos','sharmouta','khara','kalb',
+  'hmar','zebi','ayre','khawal','manyak',
+  // French
+  'merde','putain','connard','salope','encule',
+  'batard','fdp','ntm','bordel','nique',
+  // German
+  'scheisse','fick','hurensohn','wichser',
+  'arschloch','schlampe','vollidiot',
+  // Portuguese
+  'porra','caralho','merda','foder','cuzao',
+  'viado','buceta','arrombado','babaca',
+  // Russian
+  'blyad','blyat','suka','pizda','khuy',
+  'ebat','mudak','pidor','zalupa','cyka',
+  'nahuy','pizdec','gandon','shlyukha',
+  // Turkish
+  'sik','orospu','got','amk','bok','pic',
+  'ibne','yarrak','kahpe',
+  // Bengali
+  'magi','choda','bokachoda','khanki','banchod',
+  // Italian
+  'cazzo','vaffanculo','minchia','stronzo',
+  'puttana','coglione','fanculo',
+  // Japanese
+  'kichiku','kisama','temee','kuso','manuke',
+  // Korean
+  'sibal','ssibal','gaesekki','byeonshin','jiral',
 ];
 
-// Check if message contains abuse using normalized comparison
 function containsAbuse(text) {
   const normalized = normalizeText(text);
-  return BAD_WORD_ROOTS.some(word => {
-    const normWord = normalizeText(word);
-    return normalized.includes(normWord);
-  });
+  return BAD_WORD_ROOTS.some(word => normalized.includes(normalizeText(word)));
 }
 
-// ── ANTI-NUKE TRACKER ─────────────────────────────────────────────────────────
 const nukeTracker = {
   channelDelete : new Map(),
   roleDelete    : new Map(),
@@ -226,13 +118,13 @@ const nukeTracker = {
 };
 
 const NUKE_LIMITS = {
-  channelDelete : { count: 2, window: 8000  },
-  roleDelete    : { count: 2, window: 8000  },
-  ban           : { count: 2, window: 8000  },
-  kick          : { count: 2, window: 8000  },
-  webhookCreate : { count: 2, window: 8000  },
-  roleCreate    : { count: 3, window: 8000  },
-  channelCreate : { count: 3, window: 8000  },
+  channelDelete : { count: 2, window: 8000 },
+  roleDelete    : { count: 2, window: 8000 },
+  ban           : { count: 2, window: 8000 },
+  kick          : { count: 2, window: 8000 },
+  webhookCreate : { count: 2, window: 8000 },
+  roleCreate    : { count: 3, window: 8000 },
+  channelCreate : { count: 3, window: 8000 },
 };
 
 function trackNukeAction(type, userId) {
@@ -254,7 +146,7 @@ async function nukeban(guild, executorId, reason, client) {
     const ch = guild.channels.cache.find(
       c => c.isTextBased() && ['mod-log','security-log','bot-log','logs','general'].includes(c.name)
     );
-    if (ch) ch.send(`🚨 **ANTI-NUKE TRIGGERED!**\n🚫 <@${executorId}> was **INSTANTLY BANNED**\n📋 Reason: ${reason}`).catch(() => {});
+    if (ch) ch.send(`🚨 **ANTI-NUKE!** <@${executorId}> **INSTANTLY BANNED** — ${reason}`).catch(() => {});
   } catch (err) { console.error('[NUKE BAN ERROR]', err.message); }
 }
 
@@ -274,6 +166,12 @@ async function logAction(guild, msg) {
     c => c.isTextBased() && ['mod-log','security-log','bot-log','logs'].includes(c.name)
   );
   if (ch) ch.send(`[🛡️ Security] ${msg}`).catch(() => {});
+}
+
+// Auto-delete notification messages after 5 seconds
+async function sendAndDelete(channel, msg) {
+  const sent = await channel.send(msg).catch(() => null);
+  if (sent) setTimeout(() => sent.delete().catch(() => {}), 5000);
 }
 
 module.exports = {
@@ -323,8 +221,8 @@ module.exports = {
           message.delete().catch(() => {}),
           member.timeout(LINK_TIMEOUT_MS, '🔒 Unauthorized link'),
         ]);
-        await dmUser(message.author, 'Sending unauthorized links in the server', '30 Minutes Timeout');
-        await message.channel.send(`🔗 <@${userId}> timed out **30 minutes** for sending a link.`).catch(() => {});
+        await dmUser(message.author, 'Sending unauthorized links', '30 Minutes Timeout');
+        await sendAndDelete(message.channel, `🔗 <@${userId}> timed out **30 minutes** for sending a link.`);
         await logAction(message.guild, `🔗 **TIMEOUT 30min** <@${userId}> — link in <#${message.channel.id}>`);
       } catch (err) { console.error('[LINK TIMEOUT]', err.message); }
       return;
@@ -346,14 +244,14 @@ module.exports = {
             member.timeout(SPAM_TIMEOUT_MS, '🔒 Anti-Spam'),
           ]);
           await dmUser(message.author, 'Spamming messages', '10 Minutes Timeout');
-          await message.channel.send(`⏱️ <@${userId}> timed out **10 minutes** for spamming.`).catch(() => {});
+          await sendAndDelete(message.channel, `⏱️ <@${userId}> timed out **10 minutes** for spamming.`);
           await logAction(message.guild, `⏱️ **TIMEOUT 10min** <@${userId}> — spam in <#${message.channel.id}>`);
         } catch (err) { console.error('[SPAM TIMEOUT]', err.message); }
         return;
       }
     }
 
-    // ── 4. ADVANCED ABUSE DETECTION → 60 MIN TIMEOUT ─────────────────────
+    // ── 4. ABUSIVE LANGUAGE → 60 MIN TIMEOUT ─────────────────────────────
     if (containsAbuse(message.content)) {
       try {
         await Promise.all([
@@ -361,7 +259,7 @@ module.exports = {
           member.timeout(ABUSE_TIMEOUT_MS, '🔒 Abusive language'),
         ]);
         await dmUser(message.author, 'Using abusive/offensive language', '60 Minutes Timeout');
-        await message.channel.send(`🤐 <@${userId}> timed out **60 minutes** for abusive language.`).catch(() => {});
+        await sendAndDelete(message.channel, `🤐 <@${userId}> timed out **60 minutes** for abusive language.`);
         await logAction(message.guild, `🤐 **TIMEOUT 60min** <@${userId}> — abuse in <#${message.channel.id}>`);
       } catch (err) { console.error('[ABUSE TIMEOUT]', err.message); }
     }
