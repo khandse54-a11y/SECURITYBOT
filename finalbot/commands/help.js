@@ -1,35 +1,55 @@
+const { EmbedBuilder } = require('discord.js');
+
 module.exports = {
   name: 'help',
   async execute(message, args, client) {
-    const help = `
-🛡️ **SECURITY BOT — ALL COMMANDS**
+    const embed = new EmbedBuilder()
+      .setTitle('🛡️ SECURITY BOT — ALL COMMANDS')
+      .setColor(0x7289DA)
+      .addFields(
+        {
+          name: '🔒 Moderation (Whitelist Only)',
+          value: [
+            '`!ban @user [reason]` — Ban a member',
+            '`!kick @user [reason]` — Kick a member',
+            '`!timeout @user [minutes] [reason]` — Timeout a member',
+            '`!untimeout @user` — Remove timeout from a member',
+            '`!unban <userID>` — Unban by ID',
+          ].join('\n'),
+        },
+        {
+          name: '👑 Whitelist (Owner Only)',
+          value: [
+            '`!whitelist add @user` — Add to whitelist',
+            '`!whitelist remove @user` — Remove from whitelist',
+            '`!whitelist list` — See all whitelisted users',
+          ].join('\n'),
+        },
+        {
+          name: '🚨 Auto-Security (Always ON)',
+          value: [
+            '• @everyone/@here ping → **INSTANT BAN**',
+            '• Links → **30 min timeout + msg deleted**',
+            '• Spam (5 msgs/5sec) → **10 min timeout**',
+            '• Abusive language → **60 min timeout**',
+            '• Mass ban/kick/channel/role delete → **INSTANT BAN**',
+          ].join('\n'),
+        },
+        {
+          name: '🔊 Voice',
+          value: '`!join` — Join voice channel (deafened & muted)',
+        },
+        {
+          name: 'ℹ️ Info',
+          value: [
+            '`!ping` — Check bot latency',
+            '`!help` — Show this message',
+          ].join('\n'),
+        }
+      )
+      .setFooter({ text: 'Security Bot — Protecting your server 24/7' })
+      .setTimestamp();
 
-**🔒 Moderation (Whitelist Only)**
-\`!ban @user [reason]\` — Ban a member
-\`!kick @user [reason]\` — Kick a member
-\`!timeout @user [minutes] [reason]\` — Timeout a member
-\`!untimeout @user\` — Remove timeout from a member
-\`!unban <userID>\` — Unban by ID
-
-**👑 Whitelist (Owner Only)**
-\`!whitelist list\` — See all whitelisted users
-\`!whitelist add @user\` — Add user to whitelist
-\`!whitelist remove @user\` — Remove user from whitelist
-
-**🚨 Auto-Security (Always ON)**
-- @everyone / @here ping → **INSTANT BAN**
-- Links → **30 min timeout + msg deleted**
-- Spam (5 msgs in 5 sec) → **10 min timeout**
-- Abusive language (all languages) → **60 min timeout**
-- Mass ban/kick/channel/role delete → nuker gets **INSTANT BAN**
-
-**🔊 Voice**
-\`!join\` — Join your voice channel (deafened & muted)
-
-**ℹ️ Info**
-\`!ping\` — Check bot latency
-\`!help\` — Show this message
-    `.trim();
-    message.reply(help);
+    message.reply({ embeds: [embed] });
   }
 };
