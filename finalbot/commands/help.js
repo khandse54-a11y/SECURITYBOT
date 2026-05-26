@@ -49,8 +49,4 @@ module.exports = {
         }
       )
       .setFooter({ text: 'Security Bot — Protecting your server 24/7' })
-      .setTimestamp();
-
-    message.reply({ embeds: [embed] });
-  }
-};
+      .s
