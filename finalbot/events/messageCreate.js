@@ -14,9 +14,8 @@ function normalizeText(text) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/[^a-z0-9]/g, '')
     .replace(/(.)\1{2,}/g, '$1')
-    .replace(/\s+/g, '')
     .replace(/0/g, 'o')
     .replace(/1/g, 'i')
     .replace(/3/g, 'e')
@@ -34,40 +33,46 @@ const BAD_WORD_ROOTS = [
   'fuck','fck','fuk','fvck','phuck','frick',
   'shit','sht','shyt',
   'bitch','btch','biatch',
-  'cunt','cnt','cvnt',
+  'cunt','cvnt',
   'nigger','nigga','nigg','niga',
-  'faggot','fag','fgt',
+  'faggot','fagt',
   'asshole','ashole','azhole',
   'bastard','basterd',
   'motherfucker','mofo',
-  'whore','whor','hoe',
+  'whore','whor',
   'slut','slt',
   'dick','dck','dik',
   'cock','cok',
   'pussy','pussi',
   'retard','rtard',
   'wanker','wank',
-  'twat','twt',
+  'twat',
   'prick','prik',
   'douchebag','douche',
   'dipshit','jackass','shithead',
-  // Hindi/Urdu
-  'chutiya','chutia','chut','choot','terimkc','mgh','laudi',
+  // Hindi/Urdu — root words (covers ALL phrase combinations)
+  'chut','choot','chutiya','chutia',
+  'bhosda','bhosdi','bhosdike','bhosdika',
+  'lund','loda','laude','lawde','lodu','lavde',
+  'gaand','gand','gaandu','gandu',
+  'randi','raand','rand',
   'madarchod','madarjat','maderchod',
   'behenchod','bhenchod',
-  'bhosdike','bhosdi',
+  'terimakichut','terimaki','makichut',
   'harami','kamina','kameena',
-  'laude','lawde','lodu','lund','lavde',
-  'randi','raand',
-  'gaandu','gandu','gaand','gand',
-  'mkc','bsdk','mc','bc',
+  'laudi','terimkc',
+  'mkc','bsdk',
   'haramzada','haramkhor',
   'kutte','kutta','kutti',
-  'saala','sala','saali',
+  'saala','saali',
   'jhatu','bhadwa','dalal',
-  'tatti','ullu','hijra','chakka',
+  'tatti','hijra','chakka',
+  'bur','buur',
+  'gandmasti','gandfad','bkl',
+  'behenkeland',
+  'jhatte','jhat',
   // Odia
-  'pela','maabahana','machikani','chhinali','maghia','bedhachua','bokachoda','choda','bia',
+  'pela','maabahana','machikani','chhinali','maghia','bedhachua','bokachoda','bia',
   // Spanish
   'puta','puto','mierda','cabron','cono',
   'joder','pendejo','chingada','verga',
@@ -92,7 +97,7 @@ const BAD_WORD_ROOTS = [
   'sik','orospu','got','amk','bok','pic',
   'ibne','yarrak','kahpe',
   // Bengali
-  'magi','choda','bokachoda','khanki','banchod',
+  'magi','khanki','banchod',
   // Italian
   'cazzo','vaffanculo','minchia','stronzo',
   'puttana','coglione','fanculo',
@@ -104,7 +109,9 @@ const BAD_WORD_ROOTS = [
 
 function containsAbuse(text) {
   const normalized = normalizeText(text);
-  return BAD_WORD_ROOTS.some(word => normalized.includes(normalizeText(word)));
+  const found = BAD_WORD_ROOTS.find(word => normalized.includes(normalizeText(word)));
+  if (found) console.log(`[ABUSE DETECTED] word: "${found}"`);
+  return !!found;
 }
 
 async function dmUser(user, reason, duration) {
@@ -139,7 +146,6 @@ module.exports = {
 
     const userId = message.author.id;
 
-    // ── COMMAND HANDLER ───────────────────────────────────────────────────
     const prefix = process.env.PREFIX || '!';
     if (message.content.startsWith(prefix)) {
       const args        = message.content.slice(prefix.length).trim().split(/\s+/);
@@ -152,7 +158,6 @@ module.exports = {
       return;
     }
 
-    // ── 1. @EVERYONE / @HERE → INSTANT BAN ───────────────────────────────
     if (message.mentions.everyone) {
       if (isWhitelisted(userId)) return;
       await Promise.all([
@@ -167,7 +172,6 @@ module.exports = {
 
     if (isWhitelisted(userId)) return;
 
-    // ── 2. LINK DETECTION → 30 MIN TIMEOUT ───────────────────────────────
     if (LINK_REGEX.test(message.content)) {
       LINK_REGEX.lastIndex = 0;
       try {
@@ -182,7 +186,6 @@ module.exports = {
       return;
     }
 
-    // ── 3. SPAM → 10 MIN TIMEOUT ─────────────────────────────────────────
     const now  = Date.now();
     const data = spamMap.get(userId) || { count: 0, first: now };
     if (now - data.first > SPAM_WINDOW_MS) {
@@ -205,7 +208,6 @@ module.exports = {
       }
     }
 
-    // ── 4. ABUSIVE LANGUAGE → 60 MIN TIMEOUT ─────────────────────────────
     if (containsAbuse(message.content)) {
       try {
         await Promise.all([
