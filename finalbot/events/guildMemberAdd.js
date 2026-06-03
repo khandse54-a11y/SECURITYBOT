@@ -1,6 +1,8 @@
 const store = require('../utils/store');
 const { EmbedBuilder } = require('discord.js');
 
+const LOG_CHANNEL_ID = '1511636772184915988';
+
 module.exports = {
   name: 'guildMemberAdd',
   async execute(member, client) {
@@ -18,8 +20,9 @@ module.exports = {
       }
     }
 
-    // Log new member to system channel
-    const logChannel = member.guild.systemChannel
+    // Send join log to specific channel
+    const logChannel = member.guild.channels.cache.get(LOG_CHANNEL_ID)
+      || member.guild.systemChannel
       || member.guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(member.guild.members.me)?.has('SendMessages'));
 
     if (logChannel) {
