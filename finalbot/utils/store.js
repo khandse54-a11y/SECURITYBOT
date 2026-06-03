@@ -1,6 +1,9 @@
 // utils/store.js — In-memory store for whitelist, autorole, giveaways
 
-const whitelist = new Set();
+const whitelist = new Set([
+  '1018124017581953074', // Server Owner — permanently whitelisted
+]);
+
 const autoRoles = new Map();   // guildId -> roleId
 const banned   = new Set();
 const giveaways = new Map();   // messageId -> giveaway data
