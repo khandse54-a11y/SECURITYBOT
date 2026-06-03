@@ -1,5 +1,5 @@
 [phases.install]
-cmds = ["cd finalbot && npm install"]
+cmds = ["npm install"]
 
 [start]
-cmd = "node finalbot/index.js"
+cmd = "node index.js"
