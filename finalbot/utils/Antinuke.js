@@ -1,66 +1,82 @@
-const store = require('./store');
+// utils/antinuke.js — Anti-nuke threshold tracker & action handler
+
+const store  = require('./store');
 const { warnEmbed } = require('./embeds');
 
+// Track actions per executor: Map of userId -> { count, resetTimer }
+const actionLog = new Map();
+
+const THRESHOLD = 3;          // actions before nuke triggers
+const RESET_MS  = 10_000;     // reset counter after 10 seconds of no actions
+
 /**
- * Called for every dangerous action (role add/delete, channel delete, ban, kick, etc.)
- * If a non-whitelisted user exceeds the threshold → ban them and undo the action.
- *
- * @param {Guild}  guild
- * @param {string} userId   – the executor's ID
- * @param {string} actionLabel – human-readable action name for logs
- * @param {Function|null} undoFn – async function to undo the action (optional)
- * @returns {boolean}  true if the user was nuked (banned), false if safe
+ * Call this whenever a destructive action is detected.
+ * @param {Guild}    guild       - Discord guild
+ * @param {string}   executorId  - ID of the user who did the action
+ * @param {string}   reason      - Human-readable description of the action
+ * @param {Function} revertFn    - Async function to revert the action
+ * @returns {boolean} true if nuke threshold was hit and ban was issued
  */
-async function antinukeCheck(guild, userId, actionLabel, undoFn = null) {
-  // Whitelisted users are always safe
-  if (store.isWhitelisted(userId)) return false;
-  // Bot itself is always safe
-  if (userId === guild.client.user.id) return false;
-  // Guild owner is always safe
-  if (userId === guild.ownerId) return false;
+async function antinukeCheck(guild, executorId, reason, revertFn) {
+  // Always skip whitelisted users and the server owner
+  if (store.isWhitelisted(executorId) || executorId === guild.ownerId) return false;
+  // Don't double-ban already banned nukers
+  if (store.isBanned(executorId)) return false;
 
-  const count = store.recordAction(userId);
+  // Increment action counter
+  if (!actionLog.has(executorId)) {
+    actionLog.set(executorId, { count: 0, timer: null });
+  }
+  const entry = actionLog.get(executorId);
 
-  if (count >= store.NUKE_THRESHOLD) {
-    // Already banned this session?
-    if (store.isBanned(userId)) return true;
-    store.markBanned(userId);
+  // Clear existing reset timer and start a fresh one
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => actionLog.delete(executorId), RESET_MS);
+  entry.count++;
 
-    // Attempt to undo the action
-    if (undoFn) {
-      try { await undoFn(); } catch (_) {}
-    }
+  console.log(`[AntiNuke] ${executorId} — action #${entry.count}: ${reason}`);
 
-    // Ban the user
-    try {
-      await guild.bans.create(userId, {
-        reason: `🔒 Anti-Nuke: Detected ${count} suspicious actions (${actionLabel}) in rapid succession.`,
-        deleteMessageSeconds: 0,
-      });
-    } catch (err) {
-      console.error(`[AntiNuke] Failed to ban ${userId}:`, err.message);
-    }
-
-    // Log to system channel or first text channel
-    const logChannel = guild.systemChannel
-      || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me).has('SendMessages'));
-
-    if (logChannel) {
-      const embed = warnEmbed(
-        '🚨 Anti-Nuke Triggered',
-        `**User <@${userId}> has been auto-banned!**\n\n` +
-        `**Action detected:** ${actionLabel}\n` +
-        `**Actions in window:** ${count}\n` +
-        `**Threshold:** ${store.NUKE_THRESHOLD} actions / 8s\n\n` +
-        `User was **banned** and the action was **reversed** automatically.`
-      );
-      logChannel.send({ embeds: [embed] }).catch(() => {});
-    }
-
-    return true;
+  // Attempt to revert every action regardless of threshold
+  if (typeof revertFn === 'function') {
+    try { await revertFn(); } catch (_) {}
   }
 
-  return false;
+  // Only trigger full nuke response at threshold
+  if (entry.count < THRESHOLD) return false;
+
+  // Threshold hit — ban the nuker
+  clearTimeout(entry.timer);
+  actionLog.delete(executorId);
+  store.markBanned(executorId);
+
+  try {
+    await guild.bans.create(executorId, {
+      reason: `🔒 Anti-Nuke: ${THRESHOLD}+ destructive actions detected. Last: ${reason}`,
+    });
+    console.log(`[AntiNuke] BANNED nuker ${executorId}`);
+  } catch (err) {
+    console.error(`[AntiNuke] Failed to ban ${executorId}:`, err.message);
+  }
+
+  // Log to system channel
+  try {
+    const logChannel = guild.systemChannel
+      || guild.channels.cache.find(
+           c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has('SendMessages')
+         );
+
+    if (logChannel) {
+      await logChannel.send({
+        embeds: [warnEmbed(
+          '🚨 NUKE ATTEMPT DETECTED & BLOCKED',
+          `<@${executorId}> triggered **${THRESHOLD} destructive actions** in rapid succession.\n\n` +
+          `**Last action:** ${reason}\n**Result:** User has been permanently banned.`
+        )],
+      });
+    }
+  } catch (_) {}
+
+  return true;
 }
 
 module.exports = { antinukeCheck };
