@@ -1,57 +1,26 @@
-// ============================================================
-//  utils/store.js  –  in-memory data store (no database needed)
-// ============================================================
+// utils/store.js — In-memory store for whitelist, autorole, giveaways
 
-const store = {
-  // Set of whitelisted user IDs
-  whitelist: new Set(),
+const whitelist = new Set();
+const autoRoles = new Map();   // guildId -> roleId
+const banned   = new Set();
+const giveaways = new Map();   // messageId -> giveaway data
 
-  // Map of guildId -> roleId for auto-role
-  autoRole: new Map(),
+module.exports = {
+  // ── Whitelist ──────────────────────────────────────────────────────────────
+  addWhitelist(userId)      { whitelist.add(userId); },
+  removeWhitelist(userId)   { whitelist.delete(userId); },
+  isWhitelisted(userId)     { return whitelist.has(userId); },
+  getWhitelist()            { return [...whitelist]; },
 
-  // Active giveaways  Map of messageId -> giveaway object
-  giveaways: new Map(),
+  // ── Auto-Role ──────────────────────────────────────────────────────────────
+  setAutoRole(guildId, roleId) { autoRoles.set(guildId, roleId); },
+  getAutoRole(guildId)         { return autoRoles.get(guildId) || null; },
+  clearAutoRole(guildId)       { autoRoles.delete(guildId); },
 
-  // Anti-nuke action tracking  Map of userId -> { actions: [], banned: bool }
-  nukeTracker: new Map(),
+  // ── Banned tracking ────────────────────────────────────────────────────────
+  markBanned(userId)   { banned.add(userId); },
+  isBanned(userId)     { return banned.has(userId); },
 
-  // Anti-nuke thresholds (actions within TIME_WINDOW ms)
-  NUKE_THRESHOLD: 3,
-  TIME_WINDOW: 8000, // 8 seconds
-
-  // ── Whitelist helpers ──────────────────────────────────────
-  addWhitelist(userId) { this.whitelist.add(userId); },
-  removeWhitelist(userId) { this.whitelist.delete(userId); },
-  isWhitelisted(userId) { return this.whitelist.has(userId); },
-  getWhitelist() { return [...this.whitelist]; },
-
-  // ── Auto-role helpers ──────────────────────────────────────
-  setAutoRole(guildId, roleId) { this.autoRole.set(guildId, roleId); },
-  getAutoRole(guildId) { return this.autoRole.get(guildId) || null; },
-  clearAutoRole(guildId) { this.autoRole.delete(guildId); },
-
-  // ── Nuke tracker helpers ───────────────────────────────────
-  recordAction(userId) {
-    const now = Date.now();
-    if (!this.nukeTracker.has(userId)) {
-      this.nukeTracker.set(userId, { actions: [], banned: false });
-    }
-    const data = this.nukeTracker.get(userId);
-    data.actions.push(now);
-    // Remove actions older than TIME_WINDOW
-    data.actions = data.actions.filter(t => now - t < this.TIME_WINDOW);
-    return data.actions.length;
-  },
-  isBanned(userId) {
-    return this.nukeTracker.get(userId)?.banned || false;
-  },
-  markBanned(userId) {
-    if (!this.nukeTracker.has(userId)) {
-      this.nukeTracker.set(userId, { actions: [], banned: true });
-    } else {
-      this.nukeTracker.get(userId).banned = true;
-    }
-  },
+  // ── Giveaways ──────────────────────────────────────────────────────────────
+  giveaways,
 };
-
-module.exports = store;
