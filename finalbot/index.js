@@ -22,7 +22,7 @@ client.musicQueues = new Map();
 client.prefix      = process.env.PREFIX || '!';
 
 // Load commands (safe)
-const commandsPath = path.join(__dirname, 'commands');
+const commandsPath = path.join(__dirname, 'command');
 if (fs.existsSync(commandsPath)) {
   for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
     const cmd = require(path.join(commandsPath, file));
