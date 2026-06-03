@@ -1,36 +1,38 @@
-const { isWhitelisted } = require('../utils/whitelist');
+const { antinukeCheck } = require('../utils/antinuke');
+const { ChannelType } = require('discord.js');
 
 module.exports = {
   name: 'channelDelete',
   async execute(channel, client) {
     if (!channel.guild) return;
+    const guild = channel.guild;
 
-    const logs  = await channel.guild.fetchAuditLogs({ type: 12, limit: 1 }).catch(() => null);
-    const entry = logs?.entries.first();
-    if (!entry) return;
+    const logs = await guild.fetchAuditLogs({ limit: 1, type: 12 }).catch(() => null); // 12 = CHANNEL_DELETE
+    if (!logs) return;
 
-    const executor = entry.executor;
-    if (!executor || isWhitelisted(executor.id) || executor.id === client.user.id) return;
+    const entry = logs.entries.first();
+    if (!entry || Date.now() - entry.createdTimestamp > 5000) return;
 
-    const now  = Date.now();
-    if (!client.nukeTracker) client.nukeTracker = {};
-    if (!client.nukeTracker.channelDelete) client.nukeTracker.channelDelete = new Map();
+    const executorId = entry.executor?.id;
+    if (!executorId || executorId === client.user.id) return;
 
-    const map  = client.nukeTracker.channelDelete;
-    const data = map.get(executor.id) || { count: 0, first: now };
-
-    if (now - data.first > 8000) {
-      map.set(executor.id, { count: 1, first: now });
-    } else {
-      data.count++;
-      map.set(executor.id, data);
-      if (data.count >= 2) {
-        await channel.guild.members.ban(executor.id, { reason: '🔒 ANTI-NUKE: Mass channel deletion' }).catch(() => {});
-        const ch = channel.guild.channels.cache.find(
-          c => c.isTextBased() && ['mod-log','security-log','bot-log','logs','general'].includes(c.name)
-        );
-        if (ch) ch.send(`🚨 **ANTI-NUKE!** <@${executor.id}> **BANNED** — Mass channel deletion`).catch(() => {});
+    await antinukeCheck(
+      guild,
+      executorId,
+      `Channel deletion (#${channel.name})`,
+      async () => {
+        // Recreate the channel
+        try {
+          await guild.channels.create({
+            name: channel.name,
+            type: channel.type,
+            topic: channel.topic || undefined,
+            nsfw: channel.nsfw || false,
+            parent: channel.parentId || null,
+            reason: 'Anti-Nuke: Restoring deleted channel',
+          });
+        } catch (_) {}
       }
-    }
-  }
+    );
+  },
 };
