@@ -20,25 +20,33 @@ const client = new Client({
 client.commands    = new Collection();
 client.musicQueues = new Map();
 
-// Load commands
+// Load commands (safe)
 const commandsPath = path.join(__dirname, 'commands');
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
-  const cmd = require(path.join(commandsPath, file));
-  if (cmd.name) client.commands.set(cmd.name, cmd);
-}
-
-// Load events
-const eventsPath = path.join(__dirname, 'events');
-for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
-  const event = require(path.join(eventsPath, file));
-  if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
-  } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+if (fs.existsSync(commandsPath)) {
+  for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith('.js'))) {
+    const cmd = require(path.join(commandsPath, file));
+    if (cmd.name) client.commands.set(cmd.name, cmd);
   }
+} else {
+  console.warn('[WARN] No commands folder found, skipping...');
 }
 
-// Heartbeat log every 5 minutes so Railway knows bot is alive
+// Load events (safe)
+const eventsPath = path.join(__dirname, 'events');
+if (fs.existsSync(eventsPath)) {
+  for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith('.js'))) {
+    const event = require(path.join(eventsPath, file));
+    if (event.once) {
+      client.once(event.name, (...args) => event.execute(...args, client));
+    } else {
+      client.on(event.name, (...args) => event.execute(...args, client));
+    }
+  }
+} else {
+  console.warn('[WARN] No events folder found, skipping...');
+}
+
+// Heartbeat log every 5 minutes
 setInterval(() => {
   console.log(`[ALIVE] ${new Date().toISOString()} | Guilds: ${client.guilds.cache.size}`);
 }, 5 * 60 * 1000);
