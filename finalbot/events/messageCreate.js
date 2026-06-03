@@ -1,34 +1,9 @@
-const { isWhitelisted } = require('../utils/whitelist');
+const store = require('../utils/store');
+const { errorEmbed, warnEmbed } = require('../utils/embeds');
+const { EmbedBuilder } = require('discord.js');
 
-const spamMap = new Map();
-const SPAM_LIMIT       = 5;
-const SPAM_WINDOW_MS   = 5000;
-const SPAM_TIMEOUT_MS  = 10 * 60 * 1000;
-const ABUSE_TIMEOUT_MS = 60 * 60 * 1000;
-const LINK_TIMEOUT_MS  = 30 * 60 * 1000;
-
-const LINK_REGEX = /https?:\/\/[^\s]+|discord\.gg\/[^\s]+|www\.[^\s]+\.[a-z]{2,}/gi;
-
-function normalizeText(text) {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, '')
-    .replace(/(.)\1{2,}/g, '$1')
-    .replace(/0/g, 'o')
-    .replace(/1/g, 'i')
-    .replace(/3/g, 'e')
-    .replace(/4/g, 'a')
-    .replace(/5/g, 's')
-    .replace(/7/g, 't')
-    .replace(/8/g, 'b')
-    .replace(/\$/g, 's')
-    .replace(/@/g, 'a')
-    .replace(/\+/g, 't');
-}
-
-const BAD_WORD_ROOTS = [
+// ─── Bad Words List ────────────────────────────────────────────────────────────
+const BAD_WORDS = [
   // English
   'fuck','fck','fuk','fvck','phuck','frick',
   'shit','sht','shyt',
@@ -50,7 +25,7 @@ const BAD_WORD_ROOTS = [
   'prick','prik',
   'douchebag','douche',
   'dipshit','jackass','shithead',
-  // Hindi/Urdu — root words (covers ALL phrase combinations)
+  // Hindi/Urdu
   'chut','choot','chutiya','chutia',
   'bhosda','bhosdi','bhosdike','bhosdika',
   'lund','loda','laude','lawde','lodu','lavde',
@@ -107,117 +82,133 @@ const BAD_WORD_ROOTS = [
   'sibal','ssibal','gaesekki','byeonshin','jiral',
 ];
 
-function containsAbuse(text) {
-  const normalized = normalizeText(text);
-  const found = BAD_WORD_ROOTS.find(word => normalized.includes(normalizeText(word)));
-  if (found) console.log(`[ABUSE DETECTED] word: "${found}"`);
-  return !!found;
+// Timeout duration for bad word usage: 5 minutes
+const TIMEOUT_DURATION = 5 * 60 * 1000;
+
+// Track warnings per user per guild: Map of `guildId-userId` -> count
+const warnCount = new Map();
+
+// Normalize message: lowercase, remove spaces/special chars/leetspeak
+function normalize(text) {
+  return text
+    .toLowerCase()
+    .replace(/[`*_~|]/g, '')          // remove markdown chars
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'i')
+    .replace(/3/g, 'e')
+    .replace(/4/g, 'a')
+    .replace(/5/g, 's')
+    .replace(/8/g, 'b')
+    .replace(/@/g, 'a')
+    .replace(/\$/g, 's')
+    .replace(/\+/g, 't')
+    .replace(/[^a-z]/g, '');          // strip everything non-alpha
 }
 
-async function dmUser(user, reason, duration) {
-  try {
-    await user.send(
-      `🚨 **You have been actioned in the server.**\n` +
-      `📋 **Reason:** ${reason}\n` +
-      `⏱️ **Duration:** ${duration}\n` +
-      `🛡️ Please follow the server rules.`
-    );
-  } catch {}
-}
-
-async function logAction(guild, msg) {
-  const ch = guild.channels.cache.find(
-    c => c.isTextBased() && ['mod-log','security-log','bot-log','logs'].includes(c.name)
-  );
-  if (ch) ch.send(`[🛡️ Security] ${msg}`).catch(() => {});
-}
-
-async function sendAndDelete(channel, msg) {
-  const sent = await channel.send(msg).catch(() => null);
-  if (sent) setTimeout(() => sent.delete().catch(() => {}), 5000);
+function containsBadWord(text) {
+  const normalized = normalize(text);
+  for (const word of BAD_WORDS) {
+    if (normalized.includes(normalize(word))) return word;
+  }
+  return null;
 }
 
 module.exports = {
   name: 'messageCreate',
   async execute(message, client) {
-    if (!message.guild || message.author.bot) return;
-    const member = message.member;
-    if (!member) return;
+    if (message.author.bot) return;
+    if (!message.guild) return;
 
-    const userId = message.author.id;
+    const prefix = client.prefix;
+    const isWl = store.isWhitelisted(message.author.id) || message.author.id === message.guild.ownerId;
 
-    const prefix = process.env.PREFIX || '!';
-    if (message.content.startsWith(prefix)) {
-      const args        = message.content.slice(prefix.length).trim().split(/\s+/);
-      const commandName = args.shift().toLowerCase();
-      const command     = client.commands.get(commandName);
-      if (command) {
-        try { await command.execute(message, args, client); }
-        catch (err) { console.error(`[CMD ERROR] ${commandName}:`, err.message); }
-      }
-      return;
-    }
+    // ── Bad Word Filter (applies to EVERYONE including whitelisted) ──────────
+    const detected = containsBadWord(message.content);
+    if (detected) {
+      // Delete the message
+      try { await message.delete(); } catch (_) {}
 
-    if (message.mentions.everyone) {
-      if (isWhitelisted(userId)) return;
-      await Promise.all([
-        message.delete().catch(() => {}),
-        member.ban({ deleteMessageSeconds: 0, reason: '🔒 Anti-Nuke: @everyone/@here ping' })
-          .catch(err => console.error('[EVERYONE BAN]', err.message)),
-      ]);
-      await dmUser(message.author, 'Pinging @everyone/@here without authorization', 'Permanent Ban');
-      await logAction(message.guild, `🚫 **BANNED** <@${userId}> — @everyone ping in <#${message.channel.id}>`);
-      return;
-    }
+      const key = `${message.guild.id}-${message.author.id}`;
+      const count = (warnCount.get(key) || 0) + 1;
+      warnCount.set(key, count);
 
-    if (isWhitelisted(userId)) return;
+      const member = message.member;
 
-    if (LINK_REGEX.test(message.content)) {
-      LINK_REGEX.lastIndex = 0;
+      // Build warning embed
+      const warnEmbed = new EmbedBuilder()
+        .setColor(0xFF4444)
+        .setTitle('🚫 Inappropriate Language Detected')
+        .setThumbnail(message.author.displayAvatarURL())
+        .addFields(
+          { name: '👤 User', value: `<@${message.author.id}>`, inline: true },
+          { name: '⚠️ Warning #', value: `${count}`, inline: true },
+          { name: '⏱️ Timeout', value: '5 minutes', inline: true },
+          { name: '📋 Action', value: count >= 3
+            ? '🔨 **Kicked** (3rd offence)'
+            : '🔇 **Timed out** for 5 minutes',
+          },
+        )
+        .setFooter({ text: 'Keep the server clean and respectful!' })
+        .setTimestamp();
+
+      // Send warning to channel
+      const warn = await message.channel.send({ embeds: [warnEmbed] });
+      setTimeout(() => warn.delete().catch(() => {}), 8000); // auto-delete warning after 8s
+
+      // DM the user
       try {
-        await Promise.all([
-          message.delete().catch(() => {}),
-          member.timeout(LINK_TIMEOUT_MS, '🔒 Unauthorized link'),
-        ]);
-        await dmUser(message.author, 'Sending unauthorized links', '30 Minutes Timeout');
-        await sendAndDelete(message.channel, `🔗 <@${userId}> timed out **30 minutes** for sending a link.`);
-        await logAction(message.guild, `🔗 **TIMEOUT 30min** <@${userId}> — link in <#${message.channel.id}>`);
-      } catch (err) { console.error('[LINK TIMEOUT]', err.message); }
-      return;
-    }
+        const dmEmbed = new EmbedBuilder()
+          .setColor(0xFF4444)
+          .setTitle(`⚠️ Warning from ${message.guild.name}`)
+          .setDescription(`Your message was deleted for containing inappropriate language.\n\n**Warning #${count}**\nYou have been timed out for **5 minutes**.\n\nRepeated offences will result in a **kick** from the server.`)
+          .setTimestamp();
+        await message.author.send({ embeds: [dmEmbed] });
+      } catch (_) {}
 
-    const now  = Date.now();
-    const data = spamMap.get(userId) || { count: 0, first: now };
-    if (now - data.first > SPAM_WINDOW_MS) {
-      spamMap.set(userId, { count: 1, first: now });
-    } else {
-      data.count++;
-      spamMap.set(userId, data);
-      if (data.count >= SPAM_LIMIT) {
-        spamMap.delete(userId);
+      // Apply timeout (skip for whitelisted but still warn)
+      if (!isWl && member?.moderatable) {
         try {
-          await Promise.all([
-            message.delete().catch(() => {}),
-            member.timeout(SPAM_TIMEOUT_MS, '🔒 Anti-Spam'),
-          ]);
-          await dmUser(message.author, 'Spamming messages', '10 Minutes Timeout');
-          await sendAndDelete(message.channel, `⏱️ <@${userId}> timed out **10 minutes** for spamming.`);
-          await logAction(message.guild, `⏱️ **TIMEOUT 10min** <@${userId}> — spam in <#${message.channel.id}>`);
-        } catch (err) { console.error('[SPAM TIMEOUT]', err.message); }
-        return;
+          await member.timeout(TIMEOUT_DURATION, `Bad language detected (warning #${count})`);
+        } catch (_) {}
       }
+
+      // Kick on 3rd offence
+      if (!isWl && count >= 3 && member?.kickable) {
+        try {
+          await member.kick('Repeated use of inappropriate language (3 warnings)');
+          warnCount.delete(key); // reset after kick
+        } catch (_) {}
+      }
+
+      return; // Don't process commands if bad word found
     }
 
-    if (containsAbuse(message.content)) {
-      try {
-        await Promise.all([
-          message.delete().catch(() => {}),
-          member.timeout(ABUSE_TIMEOUT_MS, '🔒 Abusive language'),
-        ]);
-        await dmUser(message.author, 'Using abusive/offensive language', '60 Minutes Timeout');
-        await sendAndDelete(message.channel, `🤐 <@${userId}> timed out **60 minutes** for abusive language.`);
-        await logAction(message.guild, `🤐 **TIMEOUT 60min** <@${userId}> — abuse in <#${message.channel.id}>`);
-      } catch (err) { console.error('[ABUSE TIMEOUT]', err.message); }
+    // ── Command Handler ───────────────────────────────────────────────────────
+    if (!message.content.startsWith(prefix)) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/\s+/);
+    const commandName = args.shift().toLowerCase();
+    const command = client.commands.get(commandName);
+    if (!command) return;
+
+    // Public commands anyone can use
+    const publicCommands = ['help', 'ping'];
+    if (!publicCommands.includes(commandName) && !isWl) {
+      return message.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(0xFF4444)
+          .setTitle('❌ Access Denied')
+          .setDescription('🔒 You are **not whitelisted**.\nOnly whitelisted members can use bot commands.')
+          .setTimestamp()
+        ],
+      });
     }
-  }
+
+    try {
+      await command.execute(message, args);
+    } catch (err) {
+      console.error(`[Command Error] ${commandName}:`, err);
+      message.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('❌ Error').setDescription('An error occurred while running this command.').setTimestamp()] });
+    }
+  },
 };
