@@ -19,6 +19,7 @@ const client = new Client({
 
 client.commands    = new Collection();
 client.musicQueues = new Map();
+client.prefix      = process.env.PREFIX || '!';
 
 // Load commands (safe)
 const commandsPath = path.join(__dirname, 'commands');
