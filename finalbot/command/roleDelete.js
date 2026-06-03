@@ -1,11 +1,12 @@
 const { antinukeCheck } = require('../utils/antinuke');
+const store = require('../utils/store');
 
 module.exports = {
   name: 'roleDelete',
   async execute(role, client) {
     const guild = role.guild;
 
-    const logs = await guild.fetchAuditLogs({ limit: 1, type: 32 }).catch(() => null); // 32 = ROLE_DELETE
+    const logs = await guild.fetchAuditLogs({ limit: 1, type: 32 }).catch(() => null);
     if (!logs) return;
 
     const entry = logs.entries.first();
@@ -14,12 +15,14 @@ module.exports = {
     const executorId = entry.executor?.id;
     if (!executorId || executorId === client.user.id) return;
 
+    // Skip whitelisted and owner
+    if (store.isWhitelisted(executorId) || executorId === guild.ownerId) return;
+
     await antinukeCheck(
       guild,
       executorId,
       `Role deletion (@${role.name})`,
       async () => {
-        // Recreate the role
         try {
           await guild.roles.create({
             name: role.name,
