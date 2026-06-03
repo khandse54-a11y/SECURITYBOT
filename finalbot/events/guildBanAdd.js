@@ -1,34 +1,31 @@
-const { isWhitelisted } = require('../utils/whitelist');
+const { antinukeCheck } = require('../utils/antinuke');
 
 module.exports = {
   name: 'guildBanAdd',
   async execute(ban, client) {
-    const logs  = await ban.guild.fetchAuditLogs({ type: 22, limit: 1 }).catch(() => null);
-    const entry = logs?.entries.first();
+    const guild = ban.guild;
+
+    // Fetch audit log to find who did the ban
+    const logs = await guild.fetchAuditLogs({ limit: 1, type: 22 }).catch(() => null); // 22 = MEMBER_BAN_ADD
+    if (!logs) return;
+
+    const entry = logs.entries.first();
     if (!entry) return;
 
-    const executor = entry.executor;
-    if (!executor || isWhitelisted(executor.id) || executor.id === client.user.id) return;
+    const executorId = entry.executor?.id;
+    if (!executorId) return;
 
-    const now  = Date.now();
-    if (!client.nukeTracker) client.nukeTracker = {};
-    if (!client.nukeTracker.ban) client.nukeTracker.ban = new Map();
+    // Don't flag if bot itself did the ban
+    if (executorId === client.user.id) return;
 
-    const map  = client.nukeTracker.ban;
-    const data = map.get(executor.id) || { count: 0, first: now };
-
-    if (now - data.first > 8000) {
-      map.set(executor.id, { count: 1, first: now });
-    } else {
-      data.count++;
-      map.set(executor.id, data);
-      if (data.count >= 2) {
-        await ban.guild.members.ban(executor.id, { reason: '🔒 ANTI-NUKE: Mass banning' }).catch(() => {});
-        const ch = ban.guild.channels.cache.find(
-          c => c.isTextBased() && ['mod-log','security-log','bot-log','logs','general'].includes(c.name)
-        );
-        if (ch) ch.send(`🚨 **ANTI-NUKE!** <@${executor.id}> **BANNED** — Mass banning members`).catch(() => {});
+    await antinukeCheck(
+      guild,
+      executorId,
+      `Mass ban (banned <@${ban.user.id}>)`,
+      async () => {
+        // Try to unban the victim
+        try { await guild.bans.remove(ban.user.id, 'Anti-Nuke: Reverting ban by nuker'); } catch (_) {}
       }
-    }
-  }
+    );
+  },
 };
