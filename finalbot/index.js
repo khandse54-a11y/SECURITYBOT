@@ -46,12 +46,12 @@ if (fs.existsSync(eventsPath)) {
   console.warn('[WARN] No events folder found, skipping...');
 }
 
-// Heartbeat log every 5 minutes
+// Heartbeat log every 5 minutes so Railway knows bot is alive
 setInterval(() => {
   console.log(`[ALIVE] ${new Date().toISOString()} | Guilds: ${client.guilds.cache.size}`);
 }, 5 * 60 * 1000);
 
-client.login(process.env.BOT_TOKEN).catch(err => {
+client.login(process.env.TOKEN).catch(err => {
   console.error('FAILED TO LOGIN:', err.message);
   process.exit(1);
 });
