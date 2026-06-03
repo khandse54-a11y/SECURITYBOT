@@ -1,5 +1,5 @@
 const { antinukeCheck } = require('../utils/antinuke');
-const { ChannelType } = require('discord.js');
+const store = require('../utils/store');
 
 module.exports = {
   name: 'channelDelete',
@@ -7,7 +7,7 @@ module.exports = {
     if (!channel.guild) return;
     const guild = channel.guild;
 
-    const logs = await guild.fetchAuditLogs({ limit: 1, type: 12 }).catch(() => null); // 12 = CHANNEL_DELETE
+    const logs = await guild.fetchAuditLogs({ limit: 1, type: 12 }).catch(() => null);
     if (!logs) return;
 
     const entry = logs.entries.first();
@@ -16,12 +16,14 @@ module.exports = {
     const executorId = entry.executor?.id;
     if (!executorId || executorId === client.user.id) return;
 
+    // Skip whitelisted and owner
+    if (store.isWhitelisted(executorId) || executorId === guild.ownerId) return;
+
     await antinukeCheck(
       guild,
       executorId,
       `Channel deletion (#${channel.name})`,
       async () => {
-        // Recreate the channel
         try {
           await guild.channels.create({
             name: channel.name,
