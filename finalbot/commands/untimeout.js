@@ -1,9 +1,9 @@
-const { isWhitelisted } = require('../utils/whitelist');
+const store = require('../utils/store');
 
 module.exports = {
   name: 'untimeout',
   async execute(message, args, client) {
-    if (!isWhitelisted(message.author.id))
+    if (!store.isWhitelisted(message.author.id) && message.author.id !== message.guild.ownerId)
       return message.reply('❌ You are not authorized.');
 
     const target = message.mentions.members.first()
