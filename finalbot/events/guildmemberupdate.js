@@ -1,5 +1,5 @@
-const { antinukeCheck } = require('../utils/antinuke');
 const store = require('../utils/store');
+const { warnEmbed } = require('../utils/embeds');
 
 module.exports = {
   name: 'guildMemberUpdate',
@@ -19,19 +19,41 @@ module.exports = {
     const executorId = entry.executor?.id;
     if (!executorId || executorId === client.user.id) return;
 
-    // Skip whitelisted and owner
+    // Skip whitelisted and owner — they can freely manage roles
     if (store.isWhitelisted(executorId) || executorId === guild.ownerId) return;
 
-    await antinukeCheck(
-      guild,
-      executorId,
-      `Unauthorized role modification on <@${newMember.id}>`,
-      async () => {
-        try {
-          if (addedRoles.size > 0)   await newMember.roles.remove(addedRoles, 'Anti-Nuke: Reverting role add');
-          if (removedRoles.size > 0) await newMember.roles.add(removedRoles,  'Anti-Nuke: Reverting role remove');
-        } catch (_) {}
+    // Non-whitelisted tried to add/remove roles → INSTANT BAN + revert
+    console.log(`[Security] Non-whitelisted ${executorId} modified roles → instant ban`);
+
+    // Revert role changes first
+    try {
+      if (addedRoles.size > 0)   await newMember.roles.remove(addedRoles,  'Anti-Nuke: Reverting unauthorized role add');
+      if (removedRoles.size > 0) await newMember.roles.add(removedRoles,   'Anti-Nuke: Reverting unauthorized role remove');
+    } catch (_) {}
+
+    // Instant ban
+    try {
+      await guild.bans.create(executorId, {
+        reason: '🔒 Security: Non-whitelisted user attempted to modify member roles.',
+      });
+      store.markBanned(executorId);
+    } catch (err) {
+      console.error('[Security] Failed to ban:', err.message);
+    }
+
+    // Log to system channel
+    try {
+      const logChannel = guild.systemChannel
+        || guild.channels.cache.find(c => c.isTextBased() && c.permissionsFor(guild.members.me)?.has('SendMessages'));
+
+      if (logChannel) {
+        logChannel.send({
+          embeds: [warnEmbed(
+            '🚨 Unauthorized Role Modification — BANNED',
+            `<@${executorId}> tried to **${addedRoles.size > 0 ? 'add' : 'remove'} roles** on <@${newMember.id}> without being whitelisted.\n\n**Action:** Instant ban + roles reverted.`
+          )]
+        }).catch(() => {});
       }
-    );
+    } catch (_) {}
   },
 };
