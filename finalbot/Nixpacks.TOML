@@ -1,8 +1,5 @@
-[phases.setup]
-nixPkgs = ["nodejs_22"]
-
 [phases.install]
-cmds = ["npm install"]
+cmds = ["cd finalbot && npm install"]
 
 [start]
-cmd = "node index.js"
+cmd = "node finalbot/index.js"
